@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "Hymn App",
+    "slug": "hymn-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#2D5A27"
+    },
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.yourchurch.hymnapp"
+    },
+    "web": {}
+  }
+}
