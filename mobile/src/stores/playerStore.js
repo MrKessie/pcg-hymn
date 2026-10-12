@@ -1,6 +1,8 @@
 // src/stores/playerStore.js
-import { Audio } from "expo-av";
+import { createAudioPlayer, setAudioModeAsync } from "expo-audio";
 import { create } from "zustand";
+
+let statusSubscription = null;
 
 export const usePlayerStore = create((set, get) => ({
   sound: null,
@@ -16,36 +18,48 @@ export const usePlayerStore = create((set, get) => ({
   loadAndPlay: async (hymn, audioUri) => {
     try {
       const currentSound = get().sound;
+      if (statusSubscription) {
+        statusSubscription.remove();
+        statusSubscription = null;
+      }
       if (currentSound) {
-        await currentSound.unloadAsync();
+        try {
+          currentSound.pause();
+          currentSound.release();
+        } catch (_) {}
       }
 
-      set({ isLoading: true, currentHymn: hymn, isVisible: true });
+      set({ isLoading: true, currentHymn: hymn, isVisible: true, position: 0, duration: 0 });
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        staysActiveInBackground: true,
-        playsInSilentModeIOS: true,
+      try {
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          shouldPlayInBackground: true,
+        });
+      } catch (e) {
+        console.warn("Failed to set audio mode:", e);
+      }
+
+      const player = createAudioPlayer({ uri: audioUri });
+      player.playbackRate = get().playbackRate;
+
+      statusSubscription = player.addListener("playbackStatusUpdate", (status) => {
+        const currentTimeMs = Math.round((status.currentTime || 0) * 1000);
+        const durationMs = Math.round((status.duration || 0) * 1000);
+
+        set({
+          position: currentTimeMs,
+          duration: durationMs,
+          isPlaying: status.playing ?? player.playing,
+        });
+
+        if (status.didJustFinish) {
+          set({ isPlaying: false, position: 0 });
+        }
       });
 
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: audioUri },
-        { shouldPlay: true, rate: get().playbackRate, shouldCorrectPitch: true },
-        (status) => {
-          if (status.isLoaded) {
-            set({
-              position: status.positionMillis || 0,
-              duration: status.durationMillis || 0,
-              isPlaying: status.isPlaying,
-            });
-            if (status.didJustFinish) {
-              set({ isPlaying: false, position: 0 });
-            }
-          }
-        },
-      );
-
-      set({ sound: newSound, isLoading: false, isPlaying: true });
+      player.play();
+      set({ sound: player, isLoading: false, isPlaying: true });
     } catch (error) {
       console.error("Error loading audio:", error);
       set({ isLoading: false });
@@ -57,9 +71,11 @@ export const usePlayerStore = create((set, get) => ({
     if (!sound) return;
     try {
       if (isPlaying) {
-        await sound.pauseAsync();
+        sound.pause();
+        set({ isPlaying: false });
       } else {
-        await sound.playAsync();
+        sound.play();
+        set({ isPlaying: true });
       }
     } catch (error) {
       console.error("Error toggling play/pause:", error);
@@ -70,7 +86,9 @@ export const usePlayerStore = create((set, get) => ({
     const { sound } = get();
     if (!sound) return;
     try {
-      await sound.setPositionAsync(positionMillis);
+      const positionSeconds = positionMillis / 1000;
+      sound.seekTo(positionSeconds);
+      set({ position: positionMillis });
     } catch (error) {
       console.error("Error seeking:", error);
     }
@@ -81,7 +99,7 @@ export const usePlayerStore = create((set, get) => ({
     set({ playbackRate: rate });
     if (sound) {
       try {
-        await sound.setRateAsync(rate, true);
+        sound.playbackRate = rate;
       } catch (error) {
         console.error("Error setting playback rate:", error);
       }
@@ -90,10 +108,14 @@ export const usePlayerStore = create((set, get) => ({
 
   stop: async () => {
     const { sound } = get();
+    if (statusSubscription) {
+      statusSubscription.remove();
+      statusSubscription = null;
+    }
     if (sound) {
       try {
-        await sound.stopAsync();
-        await sound.unloadAsync();
+        sound.pause();
+        sound.release();
       } catch (error) {
         console.error("Error stopping:", error);
       }

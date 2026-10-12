@@ -5,15 +5,22 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "splash": {
-      "backgroundColor": "#2D5A27"
-    },
     "ios": {
       "supportsTablet": false
     },
     "android": {
       "package": "com.yourchurch.hymnapp"
     },
-    "web": {}
+    "web": {},
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#2D5A27"
+        }
+      ],
+      "expo-audio",
+      "expo-asset"
+    ]
   }
 }
